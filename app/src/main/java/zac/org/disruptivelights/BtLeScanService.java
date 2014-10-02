@@ -13,6 +13,8 @@ import android.util.Log;
 
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 public class BtLeScanService extends Service {
     public final static String TAG = "BtLeScanService";
@@ -38,6 +40,7 @@ public class BtLeScanService extends Service {
 
     private final Handler mHandler = new Handler();
     private static int SCAN_DURATION_MS = 2000;
+    private static int OUT_OF_RANGE_AFTER_S = 60;
 
 
     private final BluetoothAdapter.LeScanCallback mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
@@ -146,6 +149,8 @@ public class BtLeScanService extends Service {
     private void scheduleNextLeScan() {
         Log.d(TAG, "scheduleNextLeScan()");
 
+        findOutOfRangeDevices();
+
         if(mScanState != STATE_RUNNING) {
             Log.w(TAG, "Not STATE_RUNNING any longer");
             return;
@@ -153,6 +158,26 @@ public class BtLeScanService extends Service {
 
         //TODO
         //throw new Exception("TODO");
+    }
+
+    private void findOutOfRangeDevices() {
+        Log.d(TAG, "findOutOfRangeDevices()");
+
+        long outOfRangeTime = new Date().getTime() - OUT_OF_RANGE_AFTER_S * 1000;
+        Iterator iterator = mDevices.entrySet().iterator();
+        while(iterator.hasNext()) {
+            Map.Entry<String, Date> pairs = (Map.Entry)iterator.next();
+            if(pairs.getValue().getTime() < outOfRangeTime) {
+                long secondsSinceLastSeen = (new Date().getTime() - pairs.getValue().getTime()) / 1000;
+
+                Log.d(TAG, "Have not heard from device in " + secondsSinceLastSeen + " seconds. Sending device gone");
+                final Intent intent = new Intent(ACTION_DEVICE_GONE);
+                intent.putExtra(EXTRA_DEVICE_ADDRESS, pairs.getKey());
+                sendBroadcast(intent);
+
+                iterator.remove();
+            }
+        }
     }
 
     private boolean getBluetoothManager() {
