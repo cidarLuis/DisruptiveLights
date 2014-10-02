@@ -65,8 +65,21 @@ public class MainActivity extends Activity {
                 final String deviceAddress = intent.getStringExtra(BtLeScanService.EXTRA_DEVICE_ADDRESS);
                 final int deviceRssi = intent.getIntExtra(BtLeScanService.EXTRA_DEVICE_RSSI, -1);
 
-                addLog("New device " + deviceAddress + "(" + deviceName + ") RSSI: " + deviceRssi);
+                addLog("New device " + deviceAddress + (deviceName == null || deviceName.equals("null") ? "" : " (" + deviceName + ")") + " RSSI: " + deviceRssi);
             }
+            else if(BtLeScanService.ACTION_DEVICE_UPDATE.equals(action)) {
+                final String deviceName = intent.getStringExtra(BtLeScanService.EXTRA_DEVICE_NAME);
+                final String deviceAddress = intent.getStringExtra(BtLeScanService.EXTRA_DEVICE_ADDRESS);
+                final int deviceRssi = intent.getIntExtra(BtLeScanService.EXTRA_DEVICE_RSSI, -1);
+
+                addLog("Update device " + deviceAddress + (deviceName == null || deviceName.equals("null") ? "" : " (" + deviceName + ")") + " RSSI: " + deviceRssi);
+            }
+            else if(BtLeScanService.ACTION_DEVICE_GONE.equals(action)) {
+                final String deviceAddress = intent.getStringExtra(BtLeScanService.EXTRA_DEVICE_ADDRESS);
+
+                addLog("Device gone " + deviceAddress);
+            }
+
         }
     };
 
@@ -154,7 +167,7 @@ public class MainActivity extends Activity {
             Log.w(TAG, "mBtLeScanService is null");
             Toast.makeText(getApplicationContext(), "BT scan service is unavailable", Toast.LENGTH_LONG).show();
         } else {
-            mBtLeScanService.startScanning();
+            mBtLeScanService.startScan();
         }
     }
 }

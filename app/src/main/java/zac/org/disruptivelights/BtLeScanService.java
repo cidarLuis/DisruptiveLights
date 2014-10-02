@@ -42,6 +42,8 @@ public class BtLeScanService extends Service {
     private static int SCAN_DURATION_MS = 2000;
     private static int OUT_OF_RANGE_AFTER_S = 60;
 
+    private String mAutoConnectAddress;
+
 
     private final BluetoothAdapter.LeScanCallback mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
         @Override
@@ -55,6 +57,10 @@ public class BtLeScanService extends Service {
                 intent.putExtra(EXTRA_DEVICE_NAME, device.getName());
                 intent.putExtra(EXTRA_DEVICE_RSSI, rssi);
                 sendBroadcast(intent);
+
+                if(mAutoConnectAddress != null && mAutoConnectAddress.equals(device.getAddress())) {
+                    //TODO!
+                }
             } else {
                 final Intent intent = new Intent(ACTION_DEVICE_UPDATE);
                 intent.putExtra(EXTRA_DEVICE_ADDRESS, device.getAddress());
@@ -99,14 +105,18 @@ public class BtLeScanService extends Service {
         return true;
     }
 
-    public boolean startScanning() {
-        Log.d(TAG, "startScanning");
+    public boolean startScan() {
+        Log.d(TAG, "startScan()");
 
-        if(mScanState == STATE_RUNNING) {
-            Log.w(TAG, "Already scanning");
+        if(mScanState != STATE_RUNNING) {
+            Log.w(TAG, "startScan() but state is not STATE_RUNNING");
         }
 
-        mScanState = STATE_RUNNING;
+        if(mCurrentlyScanning) {
+            Log.e(TAG, "startScan() - mCurrentlyScanning");
+            return false;
+        }
+
         return doLeScan(false /*TODO*/);
     }
 
@@ -122,6 +132,10 @@ public class BtLeScanService extends Service {
         return false;
     }
 
+    public void addAutoconnectAddress(String address) {
+        mAutoConnectAddress = address;
+    }
+
     private boolean doLeScan(final boolean continuous) {
         Log.d(TAG, "doLeScan()");
 
@@ -135,18 +149,22 @@ public class BtLeScanService extends Service {
             return false;
         }
 
-        if(mScanState != STATE_RUNNING) {
-            Log.e(TAG, "Not STATE_RUNNING");
-            return false;
-        }
-
         Log.d(TAG, "Starting LeScan");
         mBluetoothAdapter.startLeScan(mLeScanCallback);
+        final Intent intent = new Intent(ACTION_SCAN_STARTED);
+        sendBroadcast(intent);
+
         mHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 Log.d(TAG, "Auto-stopping LeScan");
+
                 mBluetoothAdapter.stopLeScan(mLeScanCallback);
+                final Intent intent = new Intent(ACTION_SCAN_STOPPED);
+                sendBroadcast(intent);
+
+                findOutOfRangeDevices();
+
                 if(continuous) {
                     scheduleNextLeScan();
                 }
@@ -158,8 +176,6 @@ public class BtLeScanService extends Service {
 
     private void scheduleNextLeScan() {
         Log.d(TAG, "scheduleNextLeScan()");
-
-        findOutOfRangeDevices();
 
         if(mScanState != STATE_RUNNING) {
             Log.w(TAG, "Not STATE_RUNNING any longer");
