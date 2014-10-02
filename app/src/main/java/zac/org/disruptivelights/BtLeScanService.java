@@ -89,6 +89,16 @@ public class BtLeScanService extends Service {
         return super.onUnbind(intent);
     }
 
+    public boolean initialize() {
+        Log.d(TAG, "initialize()");
+
+        if(!getBluetoothAdapter()) {
+            return false;
+        }
+
+        return true;
+    }
+
     public boolean startScanning() {
         Log.d(TAG, "startScanning");
 
