@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -19,6 +20,7 @@ public class BtLeScanService extends Service {
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
     private int mScanState = STATE_STOPPED;
+    private boolean mCurrentlyScanning;
 
     private static final int STATE_STOPPED = 1;
     private static final int STATE_RUNNING = 2;
@@ -33,6 +35,10 @@ public class BtLeScanService extends Service {
     public final static String EXTRA_DEVICE_RSSI  = "zac.org.disruptivelights.BtLeGattService.EXTRA_DEVICE_RSSI";
 
     private final HashMap<String, Date> mDevices = new HashMap<String, Date>();
+
+    private final Handler mHandler = new Handler();
+    private static int SCAN_DURATION_MS = 2000;
+
 
     private final BluetoothAdapter.LeScanCallback mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
         @Override
@@ -81,13 +87,72 @@ public class BtLeScanService extends Service {
     }
 
     public boolean startScanning() {
-        //TODO!
-        return false;
+        Log.d(TAG, "startScanning");
+
+        if(mScanState == STATE_RUNNING) {
+            Log.w(TAG, "Already scanning");
+        }
+
+        mScanState = STATE_RUNNING;
+        return doLeScan(false /*TODO*/);
     }
 
     public boolean stopScanning() {
+        Log.d(TAG, "stopScanning()");
+
+        if(mScanState == STATE_STOPPED) {
+            Log.w(TAG, "Already stopped");
+        }
+
         //TODO!
+
         return false;
+    }
+
+    private boolean doLeScan(final boolean continuous) {
+        Log.d(TAG, "doLeScan()");
+
+        if(mCurrentlyScanning) {
+            Log.e(TAG, "mCurrentlyScanning");
+            return false;
+        }
+
+        if(!getBluetoothAdapter()) {
+            Log.e(TAG, "!getBluetoothAdapter()");
+            return false;
+        }
+
+        if(mScanState != STATE_RUNNING) {
+            Log.e(TAG, "Not STATE_RUNNING");
+            return false;
+        }
+
+        Log.d(TAG, "Starting LeScan");
+        mBluetoothAdapter.startLeScan(mLeScanCallback);
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                Log.d(TAG, "Auto-stopping LeScan");
+                mBluetoothAdapter.stopLeScan(mLeScanCallback);
+                if(continuous) {
+                    scheduleNextLeScan();
+                }
+            }
+        }, SCAN_DURATION_MS);
+
+        return true;
+    }
+
+    private void scheduleNextLeScan() {
+        Log.d(TAG, "scheduleNextLeScan()");
+
+        if(mScanState != STATE_RUNNING) {
+            Log.w(TAG, "Not STATE_RUNNING any longer");
+            return;
+        }
+
+        //TODO
+        //throw new Exception("TODO");
     }
 
     private boolean getBluetoothManager() {
