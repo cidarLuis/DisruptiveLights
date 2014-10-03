@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
@@ -15,6 +16,8 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
+
+import java.util.UUID;
 
 
 /**
@@ -27,6 +30,7 @@ public class BtLeGattService extends Service {
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothGatt mBluetoothGatt;
+    private BluetoothGattService mBluetoothGattService;
     private String mBluetoothDeviceAddress;
     private int mConnectionState = STATE_DISCONNECTED;
 
@@ -39,6 +43,13 @@ public class BtLeGattService extends Service {
     public final static String ACTION_GATT_SERVICES_DISCOVERED = "zac.org.disruptivelights.BtLeGattService.ACTION_GATT_SERVICES_DISCOVERED";
     public final static String ACTION_DATA_AVAILABLE = "zac.org.disruptivelights.BtLeGattService.ACTION_DATA_AVAILABLE";
     public final static String EXTRA_DATA = "zac.org.disruptivelights.BtLeGattService.EXTRA_DATA";
+
+    public final static UUID UUID_SERVICE = sixteenBitUuid(0x2220);
+    public final static UUID UUID_RECEIVE = sixteenBitUuid(0x2221);
+    public final static UUID UUID_SEND = sixteenBitUuid(0x2222);
+    public final static UUID UUID_DISCONNECT = sixteenBitUuid(0x2223);
+    public final static UUID UUID_CLIENT_CONFIGURATION = sixteenBitUuid(0x2902);
+
 
     private final BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
 
@@ -61,6 +72,11 @@ public class BtLeGattService extends Service {
             Log.d(TAG, "onServicesDiscovered(" + status + ")");
 
             if(status == BluetoothGatt.GATT_SUCCESS) {
+                mBluetoothGattService = gatt.getService(UUID_SERVICE);
+                if (mBluetoothGattService == null) {
+                    Log.e(TAG, "mGattCallback.onServicesDiscovered() - Failed to hook UUID_SERVICE!");
+                    return;
+                }
                 broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
             } else {
                 Log.w(TAG, "onServicesDiscovered(" + status + ") - Unhandled");
@@ -91,7 +107,7 @@ public class BtLeGattService extends Service {
 
         final Intent intent = new Intent(action);
         sendBroadcast(intent);
-        //TODO: sendBroadcast(intent);
+        //TODO: Consider LocalBroadcastManager?
     }
 
     private void broadcastUpdate(final String action, final BluetoothGattCharacteristic characteristic) {
@@ -100,7 +116,7 @@ public class BtLeGattService extends Service {
         final Intent intent = new Intent(action);
         intent.putExtra(EXTRA_DATA, characteristic.getValue());
         sendBroadcast(intent, Manifest.permission.BLUETOOTH);
-        //TODO: LocalBroadcastManager.getInstance(BtLeGattService.this).sendBroadcast(intent); //TODO: , Manifest.permission.BLUETOOTH);
+        //TODO: Consider LocalBroadcastManager?
     }
 
     public class BtLeGattBinder extends Binder {
@@ -209,5 +225,30 @@ public class BtLeGattService extends Service {
 
         mBluetoothGatt.close();
         mBluetoothGatt = null;
+    }
+
+    public boolean send(byte[] data) {
+        Log.d(TAG, "send()");
+
+        if(mBluetoothGatt == null || mBluetoothGattService == null) {
+            Log.e(TAG, "send() - mBluetoothGatt or mBluetoothGattService is null");
+        }
+
+        BluetoothGattCharacteristic characteristic = mBluetoothGattService.getCharacteristic(UUID_SEND);
+        if(characteristic == null) {
+            Log.e(TAG, "Failed to get UUID_SEND characteristic");
+            return false;
+        }
+
+        characteristic.setValue(data);
+        characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+        return mBluetoothGatt.writeCharacteristic(characteristic);
+    }
+
+
+    public static UUID sixteenBitUuid(long shortUuid) {
+        final String shortUuidFormat = "0000%04X-0000-1000-8000-00805F9B34FB";
+        assert shortUuid >= 0 && shortUuid <= 0xFFFF;
+        return UUID.fromString(String.format(shortUuidFormat, shortUuid & 0xFFFF));
     }
 }

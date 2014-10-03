@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.Menu;
@@ -17,10 +18,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
+
 public class MainActivity extends Activity {
     private final static String TAG = "MainActivity";
     private BtLeScanService mBtLeScanService;
+    private AutoConnectBLEService mAutoConnectBLEService;
     private TextView mLogTextView;
+    private final Handler mHandler = new Handler();
 
 
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
@@ -53,7 +57,6 @@ public class MainActivity extends Activity {
             final String action = intent.getAction();
             Log.d(TAG, "onReceive(" + action + ")");
 
-            //TODO!
             if(BtLeScanService.ACTION_SCAN_STARTED.equals(action)) {
                 addLog("Scan started");
             }
@@ -84,6 +87,40 @@ public class MainActivity extends Activity {
     };
 
 
+    //For BtLeScanService
+    private final ServiceConnection mAutoConnectBLEServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.d(TAG, "mAutoConnectBLEServiceConnection.onServiceConnected");
+            addLog("mAutoConnectBLEServiceConnection.onServiceConnected");
+
+            mAutoConnectBLEService = ((AutoConnectBLEService.AutoConnectBLEBinder)service).getService();
+            if(mAutoConnectBLEService.start()) {
+                Log.d(TAG, "Starting AutoConnectBLEService");
+                addLog("Starting AutoConnectBLEService");
+                mHandler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.d(TAG, "Auto stopping AutoConnectBLEService after 5 seconds");
+                        mAutoConnectBLEService.stop();
+                        unbindService(mAutoConnectBLEServiceConnection); //from it's own handler? TODO
+                    }
+                }, 5000);
+            } else {
+                Log.d(TAG, "Failed to start AutoConnectBLEService");
+                addLog("Failed to start AutoConnectBLEService");
+                mAutoConnectBLEService.stop(); //??? TODO
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.d(TAG, "mAutoConnectBLEServiceConnection.onServiceDisconnected");
+            addLog("mAutoConnectBLEServiceConnection.onServiceDisconnected");
+        }
+    };
+
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,14 +147,15 @@ public class MainActivity extends Activity {
         intentFilter.addAction(BtLeScanService.ACTION_DEVICE_UPDATE);
         intentFilter.addAction(BtLeScanService.ACTION_DEVICE_GONE);
         registerReceiver(mBtLeScanUpdateReceiver, intentFilter);
+
         if(mBtLeScanService != null) {
             final boolean result = mBtLeScanService.initialize();
             if(result) {
                 Log.d(TAG, "onResume() BT Scan initialize succeeded");
-                addLog("");
+                addLog("onResume() BT Scan initialize succeeded");
             } else {
                 Log.d(TAG, "onResume() BT Scan initialize failed");
-                addLog("");
+                addLog("onResume() BT Scan initialize failed");
             }
         }
     }
@@ -154,6 +192,10 @@ public class MainActivity extends Activity {
         super.onDestroy();
         unbindService(mServiceConnection);
         mBtLeScanService = null;
+
+        //TODO: May not be hooked up? Matter?
+        unbindService(mAutoConnectBLEServiceConnection);
+        mAutoConnectBLEService = null;
     }
 
     private void addLog(String s) {
@@ -169,5 +211,18 @@ public class MainActivity extends Activity {
         } else {
             mBtLeScanService.startScan();
         }
+    }
+
+    public void onConnectButtonClick(View view) {
+        Log.d(TAG, "onConnectButtonClick()");
+        addLog("Trying auto search & connect");
+
+        //Bind the Gatt service:
+        final Intent gattIntent = new Intent(getApplicationContext(), AutoConnectBLEService.class);
+        if(!bindService(gattIntent, mAutoConnectBLEServiceConnection, BIND_AUTO_CREATE)) {
+            Log.e(TAG, "Failed to bind Gatt service");
+            addLog("Failed to bind AutoConnectBLEService");
+        }
+        addLog("Bound AutoConnectBLEService, waiting on ServiceConnection");
     }
 }

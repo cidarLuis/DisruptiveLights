@@ -38,6 +38,11 @@
             android:enabled="true"
             android:exported="false" >
         </service>
+        <service
+            android:name=".AutoConnectBLEService"
+            android:enabled="true"
+            android:exported="false" >
+        </service>
     </application>
 
 </manifest>

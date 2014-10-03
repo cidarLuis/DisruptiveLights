@@ -21,28 +21,28 @@ public class BtLeScanService extends Service {
 
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
+
     private int mScanState = STATE_STOPPED;
     private boolean mCurrentlyScanning;
+    private boolean mContinuous; //TODO: Not tested or used currently
 
     private static final int STATE_STOPPED = 1;
     private static final int STATE_RUNNING = 2;
 
-    public final static String ACTION_SCAN_STARTED = "zac.org.disruptivelights.BtLeGattService.ACTION_SCAN_STARTED";
-    public final static String ACTION_SCAN_STOPPED = "zac.org.disruptivelights.BtLeGattService.ACTION_SCAN_STOPPED";
-    public final static String ACTION_DEVICE_NEW= "zac.org.disruptivelights.BtLeGattService.ACTION_DEVICE_NEW";
-    public final static String ACTION_DEVICE_UPDATE = "zac.org.disruptivelights.BtLeGattService.ACTION_DEVICE_UPDATE";
-    public final static String ACTION_DEVICE_GONE = "zac.org.disruptivelights.BtLeGattService.ACTION_DEVICE_GONE";
-    public final static String EXTRA_DEVICE_ADDRESS = "zac.org.disruptivelights.BtLeGattService.EXTRA_DEVICE_ADDRESS";
-    public final static String EXTRA_DEVICE_NAME = "zac.org.disruptivelights.BtLeGattService.EXTRA_DEVICE_NAME";
-    public final static String EXTRA_DEVICE_RSSI  = "zac.org.disruptivelights.BtLeGattService.EXTRA_DEVICE_RSSI";
+    public final static String ACTION_SCAN_STARTED = "zac.org.disruptivelights.BtLeScanService.ACTION_SCAN_STARTED"; //TODO: Change Gatt to Scan in all of these!
+    public final static String ACTION_SCAN_STOPPED = "zac.org.disruptivelights.BtLeScanService.ACTION_SCAN_STOPPED";
+    public final static String ACTION_DEVICE_NEW= "zac.org.disruptivelights.BtLeScanService.ACTION_DEVICE_NEW";
+    public final static String ACTION_DEVICE_UPDATE = "zac.org.disruptivelights.BtLeScanService.ACTION_DEVICE_UPDATE";
+    public final static String ACTION_DEVICE_GONE = "zac.org.disruptivelights.BtLeScanService.ACTION_DEVICE_GONE";
+    public final static String EXTRA_DEVICE_ADDRESS = "zac.org.disruptivelights.BtLeScanService.EXTRA_DEVICE_ADDRESS";
+    public final static String EXTRA_DEVICE_NAME = "zac.org.disruptivelights.BtLeScanService.EXTRA_DEVICE_NAME";
+    public final static String EXTRA_DEVICE_RSSI  = "zac.org.disruptivelights.BtLeScanService.EXTRA_DEVICE_RSSI";
 
     private final HashMap<String, Date> mDevices = new HashMap<String, Date>();
 
     private final Handler mHandler = new Handler();
     private static int SCAN_DURATION_MS = 2000;
     private static int OUT_OF_RANGE_AFTER_S = 60;
-
-    private String mAutoConnectAddress;
 
 
     private final BluetoothAdapter.LeScanCallback mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
@@ -57,16 +57,31 @@ public class BtLeScanService extends Service {
                 intent.putExtra(EXTRA_DEVICE_NAME, device.getName());
                 intent.putExtra(EXTRA_DEVICE_RSSI, rssi);
                 sendBroadcast(intent);
-
-                if(mAutoConnectAddress != null && mAutoConnectAddress.equals(device.getAddress())) {
-                    //TODO!
-                }
             } else {
                 final Intent intent = new Intent(ACTION_DEVICE_UPDATE);
                 intent.putExtra(EXTRA_DEVICE_ADDRESS, device.getAddress());
                 intent.putExtra(EXTRA_DEVICE_NAME, device.getName());
                 intent.putExtra(EXTRA_DEVICE_RSSI, rssi);
                 sendBroadcast(intent);
+            }
+        }
+    };
+
+    private final Runnable mAutoStopRunnable = new Runnable() {
+        @Override
+        public void run() {
+            Log.d(TAG, "Auto-stopping LeScan");
+
+            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            final Intent intent = new Intent(ACTION_SCAN_STOPPED);
+            sendBroadcast(intent);
+
+            mCurrentlyScanning = false;
+
+            findOutOfRangeDevices();
+
+            if(mContinuous) {
+                scheduleNextLeScan();
             }
         }
     };
@@ -125,15 +140,14 @@ public class BtLeScanService extends Service {
 
         if(mScanState == STATE_STOPPED) {
             Log.w(TAG, "Already stopped");
+            return false;
         }
 
         //TODO!
+        mHandler.removeCallbacks(mAutoStopRunnable);
+        mHandler.post(mAutoStopRunnable);
 
         return false;
-    }
-
-    public void addAutoconnectAddress(String address) {
-        mAutoConnectAddress = address;
     }
 
     private boolean doLeScan(final boolean continuous) {
@@ -151,25 +165,11 @@ public class BtLeScanService extends Service {
 
         Log.d(TAG, "Starting LeScan");
         mBluetoothAdapter.startLeScan(mLeScanCallback);
+        mCurrentlyScanning = true;
         final Intent intent = new Intent(ACTION_SCAN_STARTED);
         sendBroadcast(intent);
 
-        mHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                Log.d(TAG, "Auto-stopping LeScan");
-
-                mBluetoothAdapter.stopLeScan(mLeScanCallback);
-                final Intent intent = new Intent(ACTION_SCAN_STOPPED);
-                sendBroadcast(intent);
-
-                findOutOfRangeDevices();
-
-                if(continuous) {
-                    scheduleNextLeScan();
-                }
-            }
-        }, SCAN_DURATION_MS);
+        mHandler.postDelayed(mAutoStopRunnable, SCAN_DURATION_MS);
 
         return true;
     }
